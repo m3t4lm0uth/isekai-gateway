@@ -20,6 +20,7 @@ import org.slf4j.Logger;
         authors = {"m3t4lm0uth"}
 )
 
+// main class
 public class IsekaiGateway {
 
     private final ProxyServer server;
@@ -33,9 +34,9 @@ public class IsekaiGateway {
         this.logger = logger;
     }
 
+    // create gw command when proxy initializes
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-        // create new server command on proxy initialization
         server.getCommandManager().register(
                 "isekaigateway",
                 new GatewayCommand(server, state),
@@ -44,12 +45,14 @@ public class IsekaiGateway {
         );
         logger.info("Isekai Gateway initialized. /isekaigateway command registered.");
     }
+
+    // route flagged players to event server
     @Subscribe
     public void onChooseInitialServer(PlayerChooseInitialServerEvent event) {
+
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
-        // route flagged player to event server
         if (state.isEventRequired(uuid)) {
             Optional<RegisteredServer> eventServer = server.getServer("event");
             if (eventServer.isPresent()) {

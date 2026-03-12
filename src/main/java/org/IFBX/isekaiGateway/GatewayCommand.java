@@ -13,6 +13,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 // used for player detection
 import java.util.Optional;
 
+// class to build command for admins to manually flag player
 public class GatewayCommand implements SimpleCommand {
 
     private final ProxyServer server;
