@@ -13,34 +13,37 @@ import net.kyori.adventure.text.format.NamedTextColor;
 // used for player detection
 import java.util.Optional;
 
-// class to build command for admins to manually flag player
+// class to build command for admins to manipulate player flags manually
 public class GatewayCommand implements SimpleCommand {
 
     private final ProxyServer server;
     private final GatewayState state;
+    private final GatewayMessenger messages;
 
-    // constructor: allows other methods to use server
-    public GatewayCommand(ProxyServer server, GatewayState state) {
+    // constructor: allows other methods to use server/state
+    public GatewayCommand(ProxyServer server, GatewayState state, GatewayMessenger messages) {
         this.server = server;
         this.state = state;
+        this.messages = messages;
     }
 
-    // execute: method req'd by SimpleCommand; called when /gw is ran.
+    // execute: /gw is ran.
     @Override
     public void execute(Invocation invocation) {
-        // who ran the command
-        CommandSource source = invocation.source();
-        // array of strings following command
-        String[] args = invocation.arguments();
 
-        // arg validation
-        if (args.length != 2 || !args[0].equalsIgnoreCase("trigger")) {
-            source.sendMessage (Component.text("Usage: /isekaigateway trigger <player>"));
+        CommandSource source = invocation.source(); // who ran the command
+        String[] args = invocation.arguments(); // array of strings following command
+
+        // command should be called with 2 args
+        if (args.length != 2) {
+            source.sendMessage(Component.text("Usage: /isekaigateway <trigger|clear> <player>"));
             return;
         }
 
-        // resolve target player
+        String subcommand =  args[0];
         String targetName = args[1];
+
+        // resolve target player
         Optional<Player> optionalPlayer = server.getPlayer(targetName);
 
         // stops execution if player not found
@@ -49,18 +52,24 @@ public class GatewayCommand implements SimpleCommand {
             return;
         }
 
-        // set target to actual player and flag as event-req'd in memory
+        // set target to actual player
         Player target = optionalPlayer.get();
-        state.markEventRequired(target.getUniqueId());
 
-        // build disconnect message
-        Component message = Component.text()
-                .append(Component.text("Event Pack Required\n").color(NamedTextColor.RED))
-                .append(Component.text("See discord for current pack.").color(NamedTextColor.AQUA))
-                .build();
+        if (subcommand.equalsIgnoreCase("trigger")){
+            // flag as event-req'd in memory
+            state.markEventRequired(target.getUniqueId());
 
-        // disconnect message and notify source
-        target.disconnect(message);
-        source.sendMessage(Component.text("Triggered event disconnect for " + target.getUsername()));
+            // disconnect message and notify source
+            Component message = messages.buildEventTriggeredMessage();
+            target.disconnect(message);
+            source.sendMessage(Component.text("Triggered event disconnect for " + target.getUsername()));
+
+        } else if (subcommand.equalsIgnoreCase("clear")) {
+            //clear the flag
+            state.clearEventRequired(target.getUniqueId());
+            source.sendMessage(Component.text("Cleared event flag for " + target.getUsername()));
+        } else {
+            source.sendMessage (Component.text("Usage: /isekaigateway <trigger|clear> <player>"));
+        }
     }
 }

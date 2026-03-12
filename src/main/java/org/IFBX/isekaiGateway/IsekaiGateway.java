@@ -26,6 +26,7 @@ public class IsekaiGateway {
     private final ProxyServer server;
     private final Logger logger;
     private final GatewayState state = new GatewayState();
+    private final GatewayMessenger messages = new GatewayMessenger();
 
     // constructor, creates ProxyServer and Logger, loads directory
     @Inject
@@ -39,7 +40,7 @@ public class IsekaiGateway {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         server.getCommandManager().register(
                 "isekaigateway",
-                new GatewayCommand(server, state),
+                new GatewayCommand(server, state, messages),
                 // alias
                 "gw"
         );
