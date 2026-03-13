@@ -1,6 +1,7 @@
 package org.IFBX.isekaiGateway;
 
 import org.IFBX.isekaiGateway.exceptions.EventAlreadyExistsException;
+import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
 import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -8,7 +9,6 @@ import com.zaxxer.hikari.HikariDataSource;
 
 import org.slf4j.Logger;
 
-import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -81,8 +81,8 @@ public class GatewayDatabase {
 
         try (Connection conn = dataSource.getConnection();
             PreparedStatement ps = conn.prepareStatement(sql);
-            ResultSet rs = ps.executeQuery()) {
-
+            ResultSet rs = ps.executeQuery()
+        ) {
             while (rs.next()) {
                 String key = rs.getString("event_key");
                 String name = rs.getString("name");
@@ -91,7 +91,9 @@ public class GatewayDatabase {
                 result.add(new EventSummary(key, name, status));
             }
         } catch (SQLException ex ) {
-            throw new GatewayDatabaseException("Failed to list events", ex);
+            throw new GatewayDatabaseException(
+                    "Failed to list events", ex
+            );
         }
 
         return result;
@@ -104,7 +106,9 @@ public class GatewayDatabase {
                 values (?, ?)
                 """;
 
-        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)
+        ) {
             ps.setString(1, eventKey);
             ps.setString(2, name);
             ps.executeUpdate();
@@ -117,7 +121,70 @@ public class GatewayDatabase {
             }
 
             // else, generic db failure
-            throw new GatewayDatabaseException("Failed to create event: " + eventKey, ex);
+            throw new GatewayDatabaseException(
+                    "Failed to create event: " + eventKey, ex
+            );
+        }
+    }
+
+    // update event status
+    public void setEventStatus(String eventKey, String newStatus) throws EventNotFoundException, GatewayDatabaseException {
+        String sql = """
+                update isekai_gw.events
+                set status = ?, updated_at = current_timestamp
+                where event_key = ?
+                """;
+
+        try (Connection conn = dataSource.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)
+        ){
+            ps.setString(1, newStatus);
+            ps.setString(2, eventKey);
+            int updated = ps.executeUpdate();
+
+            if (updated == 0) {
+                throw new EventNotFoundException(eventKey);
+            }
+        } catch (SQLException ex) {
+            throw new GatewayDatabaseException(
+                    "Failed to set status '" + newStatus + "' for event: " + eventKey, ex
+            );
+        }
+    }
+
+    // helper: activate event
+    public void activateEvent(String eventKey) throws EventNotFoundException, GatewayDatabaseException {
+        setEventStatus(eventKey, "active");
+    }
+
+    // helper: deactivate event
+    public void deactivateEvent(String eventKey) throws EventNotFoundException, GatewayDatabaseException {
+        setEventStatus(eventKey, "inactive");
+    }
+
+    // delete event
+    public void deleteEvent(String eventKey) throws EventNotFoundException, GatewayDatabaseException {
+        String sql = """
+                delete from isekai_gw.events
+                where event_key = ?
+                """;
+
+        try (Connection conn = dataSource.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)
+        ) {
+            ps.setString(1, eventKey);
+            int deleted = ps.executeUpdate();
+
+            if (deleted == 0) {
+                throw new EventNotFoundException(eventKey);
+            }
+
+            // if deleted > 0, any player_event_flags rows are removed by ON DELETE CASCADE.
+
+        } catch (SQLException ex) {
+            throw new GatewayDatabaseException(
+                    "Failed to delete event with key: " + eventKey, ex
+            );
         }
     }
 
@@ -134,7 +201,9 @@ public class GatewayDatabase {
                 """;
         List<String> result = new ArrayList<>();
 
-        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)
+        ) {
             ps.setObject(1, playerUuid);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -146,13 +215,13 @@ public class GatewayDatabase {
     }
 
     // flag player as event req'd, given event key
-    public void markEventRequired(UUID playerUuid, String eventKey) throws SQLException {
+    public void markEventRequired(UUID playerUuid, String eventKey) throws EventNotFoundException, GatewayDatabaseException {
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {
                 Long eventId = findEventIdByKey(conn, eventKey);
                 if (eventId == null) {
-                    throw new SQLException("Event key not found: " + eventKey);
+                    throw new EventNotFoundException(eventKey);
                 }
 
                 String sql = """
@@ -178,15 +247,21 @@ public class GatewayDatabase {
                 conn.commit();
             } catch (SQLException ex) {
                 conn.rollback();
-                throw ex;
+                throw new GatewayDatabaseException(
+                        "Failed to mark event required for key: " + eventKey, ex
+                );
             } finally {
                 conn.setAutoCommit(true);
             }
+        } catch (SQLException ex) {
+            throw new GatewayDatabaseException(
+                    "Failed to obtain connection.", ex
+            );
         }
     }
 
     // clear event req'd flag for player
-    public void clearEventRequired(UUID playerUuid, String eventKey) throws SQLException {
+    public void clearEventRequired(UUID playerUuid, String eventKey) throws GatewayDatabaseException {
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {
@@ -215,10 +290,16 @@ public class GatewayDatabase {
                 conn.commit();
             } catch (SQLException ex) {
                 conn.rollback();
-                throw ex;
+                throw new GatewayDatabaseException(
+                        "Failed to clear event flag for key: " + eventKey, ex
+                );
             } finally {
                 conn.setAutoCommit(true);
             }
+        } catch (SQLException ex) {
+            throw new GatewayDatabaseException(
+                    "Failed to obtain connection.", ex
+            );
         }
     }
 

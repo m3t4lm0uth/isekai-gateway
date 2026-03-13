@@ -8,7 +8,6 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 
@@ -16,7 +15,6 @@ import org.slf4j.Logger;
 
 import java.nio.file.Path;
 import java.sql.SQLException;
-import java.util.Optional;
 import java.util.UUID;
 
 @Plugin(

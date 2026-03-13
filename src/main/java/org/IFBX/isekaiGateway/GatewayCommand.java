@@ -7,7 +7,9 @@ import com.velocitypowered.api.proxy.ProxyServer;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+
 import org.IFBX.isekaiGateway.exceptions.EventAlreadyExistsException;
+import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
 import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 
 import java.sql.SQLException;
@@ -40,31 +42,46 @@ public class GatewayCommand implements SimpleCommand {
         return sb.toString();
     }
 
-    // helper: root usage logic
+    // ------- arg helpers -------
+    // root args
     private void sendRootUsage(CommandSource source) {
         source.sendMessage(
                 Component.text("Usage: /isekaigateway <trigger|clear|event> ...")
         );
     }
 
-    // helper: flag usage logic
+    // flag args
     private void sendFlagUsage(CommandSource source, String subcommand) {
         source.sendMessage(
                 Component.text("Usage: /isekaigateway " + subcommand.toLowerCase() + " <player> <event_key>")
         );
     }
 
-    // helper: event usage logic
+    // event root args
     private void sendEventUsage(CommandSource source) {
         source.sendMessage(
-                Component.text("Usage: /isekaigateway event <create|activate|deactivate|list>")
+                Component.text("Usage: /isekaigateway event <create|activate|deactivate|delete|list>")
         );
     }
 
-    // helper: event usage logic
+    // event create args
     private void sendCreateUsage(CommandSource source) {
         source.sendMessage(
                 Component.text("Usage: /isekaigateway event create <event_key> <name>")
+        );
+    }
+
+    // event status update args
+    private void sendStatusUpdateUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway event <activate|deactivate> <event_key>")
+        );
+    }
+
+    // event delete args
+    private void sendDeleteUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway event delete <event_key>")
         );
     }
 
@@ -103,6 +120,7 @@ public class GatewayCommand implements SimpleCommand {
     }
 
     // ------- player flag actions -------
+    // helper: handle when subcommand = trigger || clear
     private void handleFlagSubcommand(CommandSource source, String subcommand, String[] args) {
         if (args.length != 2) {
             sendFlagUsage(source, subcommand);
@@ -136,10 +154,15 @@ public class GatewayCommand implements SimpleCommand {
                 source.sendMessage(
                         Component.text("Triggered event '" + eventKey + "' for " + target.getUsername())
                 );
-            } catch (SQLException ex) {
+            } catch (EventNotFoundException ex) {
                 source.sendMessage(
-                        Component.text("Failed to trigger event for " + target.getUsername() + ": " + ex.getMessage())
-                        .color(NamedTextColor.RED)
+                        Component.text("No event found with key '" + eventKey + "'.")
+                                .color(NamedTextColor.RED)
+                );
+            } catch (GatewayDatabaseException ex) {
+                source.sendMessage(
+                        Component.text("Database error while triggering event flag: " + ex.getMessage())
+                                .color(NamedTextColor.RED)
                 );
             }
 
@@ -151,9 +174,9 @@ public class GatewayCommand implements SimpleCommand {
                 source.sendMessage(
                         Component.text("Cleared event '" + eventKey + "' flag for " + target.getUsername())
                 );
-            } catch (SQLException ex) {
+            } catch (GatewayDatabaseException ex) {
                 source.sendMessage(
-                        Component.text("Failed to clear event flag for " + target.getUsername())
+                        Component.text("Database error while clearing event flag: " + ex.getMessage())
                         .color(NamedTextColor.RED)
                 );
             }
@@ -184,6 +207,19 @@ public class GatewayCommand implements SimpleCommand {
         if (action.equalsIgnoreCase("create")) {
             String[] createArgs = Arrays.copyOfRange(args, 1, args.length);
             handleEventCreate(source, createArgs);
+            return;
+        }
+
+        // subcommand activate | deactivate
+        if (action.equalsIgnoreCase("activate") || action.equalsIgnoreCase("deactivate")) {
+            handleEventStatusUpdate(source, args);
+            return;
+        }
+
+        // subcommand delete
+        if (action.equalsIgnoreCase("delete")) {
+            String[] deleteArgs = Arrays.copyOfRange(args, 1, args.length);
+            handleEventDelete(source, deleteArgs);
             return;
         }
 
@@ -250,6 +286,71 @@ public class GatewayCommand implements SimpleCommand {
         } catch (GatewayDatabaseException ex) {
             source.sendMessage(
                     Component.text("Database error while creating event: " + ex.getMessage())
+                            .color(NamedTextColor.RED)
+            );
+        }
+    }
+
+    // activate || deactivate event
+    private void handleEventStatusUpdate(CommandSource source, String[] args) {
+        if (args.length != 2) {
+            sendStatusUpdateUsage(source);
+            return;
+        }
+
+        String action = args[0];
+        String eventKey = args[1];
+
+        try {
+            if (action.equalsIgnoreCase("activate")) {
+                database.activateEvent(eventKey);
+                source.sendMessage(
+                        Component.text("Activated event '" + eventKey + "'.")
+                );
+                return;
+            } else if (action.equalsIgnoreCase("deactivate")) {
+                database.deactivateEvent(eventKey);
+                source.sendMessage(
+                        Component.text("Deactivated event '" + eventKey + "'.")
+                );
+                return;
+            }
+
+        } catch (EventNotFoundException ex) {
+            source.sendMessage(
+                    Component.text("No event found with key '" + eventKey + "'.")
+                            .color(NamedTextColor.RED)
+            );
+        } catch (GatewayDatabaseException ex) {
+            source.sendMessage(
+                    Component.text("Database error while updating status of '" + eventKey + "'.")
+                            .color(NamedTextColor.RED)
+            );
+        }
+    }
+
+    // delete event
+    private void handleEventDelete(CommandSource source, String[] args) {
+        if (args.length != 1) {
+            sendDeleteUsage(source);
+            return;
+        }
+
+        String eventKey = args[0];
+
+        try {
+            database.deleteEvent(eventKey);
+            source.sendMessage(
+                    Component.text("Deleted event '" + eventKey + "'.")
+            );
+        } catch (EventNotFoundException ex) {
+            source.sendMessage(
+                    Component.text("No event found with key '" + eventKey + "'.")
+                            .color(NamedTextColor.RED)
+            );
+        } catch (GatewayDatabaseException ex) {
+            source.sendMessage(
+                    Component.text("Database error while deleting event: " + ex.getMessage())
                             .color(NamedTextColor.RED)
             );
         }
