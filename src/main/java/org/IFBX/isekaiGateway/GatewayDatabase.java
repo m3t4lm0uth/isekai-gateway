@@ -48,6 +48,9 @@ public class GatewayDatabase {
         logger.info("[isekai-gateway] Initialized HikariCP pool for {}.", jdbcUrl);
     }
 
+    // helper: data holder
+    public static record EventSummary(String eventKey, String name, String status) {}
+
     // helper: resolve event_id by event_key
     private Long findEventIdByKey(Connection conn, String eventKey) throws SQLException {
         String sql = """
@@ -64,6 +67,34 @@ public class GatewayDatabase {
                 return null;
             }
         }
+    }
+
+    // list all events
+    public List<EventSummary> listEvents() throws GatewayDatabaseException {
+        String sql = """
+                select event_key, name, status
+                from isekai_gw.events
+                order by created_at desc
+                """;
+
+        List<EventSummary> result = new ArrayList<>();
+
+        try (Connection conn = dataSource.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                String key = rs.getString("event_key");
+                String name = rs.getString("name");
+                String status = rs.getString("status");
+
+                result.add(new EventSummary(key, name, status));
+            }
+        } catch (SQLException ex ) {
+            throw new GatewayDatabaseException("Failed to list events", ex);
+        }
+
+        return result;
     }
 
     // create new event

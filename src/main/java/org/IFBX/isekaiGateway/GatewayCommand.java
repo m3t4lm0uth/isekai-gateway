@@ -174,6 +174,12 @@ public class GatewayCommand implements SimpleCommand {
 
         String action = args[0];
 
+        // subcommand list
+        if (action.equalsIgnoreCase("list")) {
+            handleEventList(source);
+            return;
+        }
+
         // subcommand create
         if (action.equalsIgnoreCase("create")) {
             String[] createArgs = Arrays.copyOfRange(args, 1, args.length);
@@ -183,6 +189,41 @@ public class GatewayCommand implements SimpleCommand {
 
         // else: command unknown
         sendEventUsage(source);
+    }
+
+    // event list
+    private void handleEventList(CommandSource source) {
+        try {
+            var events = database.listEvents();
+
+            if (events.isEmpty()) {
+                source.sendMessage(
+                        Component.text("No events found.")
+                );
+                return;
+            }
+
+            source.sendMessage(
+                    Component.text("Events:")
+            );
+            for (GatewayDatabase.EventSummary ev : events) {
+                // example format: [active] eventKey - name
+                String line = String.format(
+                        "[%s] %s - %s",
+                        ev.status(),
+                        ev.eventKey(),
+                        ev.name()
+                );
+                source.sendMessage(
+                        Component.text(line)
+                );
+            }
+        } catch (GatewayDatabaseException ex) {
+            source.sendMessage(
+                    Component.text("Database error while listing events: " + ex.getMessage())
+                            .color(NamedTextColor.RED)
+            );
+        }
     }
 
     // create event -args: <event_key> <name...>
