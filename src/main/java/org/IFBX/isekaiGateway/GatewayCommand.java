@@ -1,30 +1,71 @@
 package org.IFBX.isekaiGateway;
 
-// packages for velocity command interfaces
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
-// velocity types
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-// packages for building the message(s)
+
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.IFBX.isekaiGateway.exceptions.EventAlreadyExistsException;
+import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 
-// used for player detection
+import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Optional;
 
 // class to build command for admins to manipulate player flags manually
 public class GatewayCommand implements SimpleCommand {
 
     private final ProxyServer server;
-    private final GatewayState state;
+    private final GatewayDatabase database;
     private final GatewayMessenger messages;
 
-    // constructor: allows other methods to use server/state
-    public GatewayCommand(ProxyServer server, GatewayState state, GatewayMessenger messages) {
+    // constructor: allows other methods to use server/database
+    public GatewayCommand(ProxyServer server, GatewayDatabase database, GatewayMessenger messages) {
         this.server = server;
-        this.state = state;
+        this.database = database;
         this.messages = messages;
+    }
+
+    // helper: support for multi-word names
+    private static String joinArgs(String[] args, int startIndex) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = startIndex; i < args.length; i++) {
+            if (i > startIndex) {
+                sb.append(' ');
+            }
+            sb.append(args[i]);
+        }
+        return sb.toString();
+    }
+
+    // helper: root usage logic
+    private void sendRootUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway <trigger|clear|event> ...")
+        );
+    }
+
+    // helper: flag usage logic
+    private void sendFlagUsage(CommandSource source, String subcommand) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway " + subcommand.toLowerCase() + " <player> <event_key>")
+        );
+    }
+
+    // helper: event usage logic
+    private void sendEventUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway event <create|activate|deactivate|list>")
+        );
+    }
+
+    // helper: event usage logic
+    private void sendCreateUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway event create <event_key> <name>")
+        );
     }
 
     // execute: /gw is ran.
@@ -34,14 +75,42 @@ public class GatewayCommand implements SimpleCommand {
         CommandSource source = invocation.source(); // who ran the command
         String[] args = invocation.arguments(); // array of strings following command
 
-        // command should be called with 2 args
-        if (args.length != 2) {
-            source.sendMessage(Component.text("Usage: /isekaigateway <trigger|clear> <player>"));
+        // ------- arg handling -------
+        // no args
+        if (args.length == 0) {
+            sendRootUsage(source);
             return;
         }
 
-        String subcommand =  args[0];
-        String targetName = args[1];
+        String subcommand = args [0];
+
+        // event subcommand
+        if (subcommand.equalsIgnoreCase("event")) {
+            String[] eventArgs = Arrays.copyOfRange(args, 1, args.length);
+            handleEventSubcommand(source, eventArgs);
+            return;
+        }
+
+        // flag subcommands
+        if (subcommand.equalsIgnoreCase("trigger") || subcommand.equalsIgnoreCase("clear")) {
+            String[] flagArgs = Arrays.copyOfRange(args, 1, args.length);
+            handleFlagSubcommand(source, subcommand, flagArgs);
+            return;
+        }
+
+        // unknown subcommand
+        sendRootUsage(source);
+    }
+
+    // ------- player flag actions -------
+    private void handleFlagSubcommand(CommandSource source, String subcommand, String[] args) {
+        if (args.length != 2) {
+            sendFlagUsage(source, subcommand);
+            return;
+        }
+
+        String targetName = args[0];
+        String eventKey = args[1];
 
         // resolve target player
         Optional<Player> optionalPlayer = server.getPlayer(targetName);
@@ -55,21 +124,93 @@ public class GatewayCommand implements SimpleCommand {
         // set target to actual player
         Player target = optionalPlayer.get();
 
+        // trigger subcommand
         if (subcommand.equalsIgnoreCase("trigger")){
-            // flag as event-req'd in memory
-            state.markEventRequired(target.getUniqueId());
+            // flag as event-req'd
+            try {
+                database.markEventRequired(target.getUniqueId(), eventKey);
 
-            // disconnect message and notify source
-            Component message = messages.buildEventTriggeredMessage();
-            target.disconnect(message);
-            source.sendMessage(Component.text("Triggered event disconnect for " + target.getUsername()));
+                // disconnect message and notify source
+                Component message = messages.buildEventTriggeredMessage();
+                target.disconnect(message);
+                source.sendMessage(
+                        Component.text("Triggered event '" + eventKey + "' for " + target.getUsername())
+                );
+            } catch (SQLException ex) {
+                source.sendMessage(
+                        Component.text("Failed to trigger event for " + target.getUsername() + ": " + ex.getMessage())
+                        .color(NamedTextColor.RED)
+                );
+            }
 
+        // clear subcommand
         } else if (subcommand.equalsIgnoreCase("clear")) {
             //clear the flag
-            state.clearEventRequired(target.getUniqueId());
-            source.sendMessage(Component.text("Cleared event flag for " + target.getUsername()));
+            try {
+                database.clearEventRequired(target.getUniqueId(), eventKey);
+                source.sendMessage(
+                        Component.text("Cleared event '" + eventKey + "' flag for " + target.getUsername())
+                );
+            } catch (SQLException ex) {
+                source.sendMessage(
+                        Component.text("Failed to clear event flag for " + target.getUsername())
+                        .color(NamedTextColor.RED)
+                );
+            }
+
         } else {
-            source.sendMessage (Component.text("Usage: /isekaigateway <trigger|clear> <player>"));
+            // unknown subcommand
+            sendFlagUsage(source, subcommand);
+        }
+    }
+
+    // ------- event actions -------
+    // helper: handle when subcommand = event
+    private void handleEventSubcommand(CommandSource source, String[] args) {
+        if (args.length < 1) {
+            sendEventUsage(source);
+            return;
+        }
+
+        String action = args[0];
+
+        // subcommand create
+        if (action.equalsIgnoreCase("create")) {
+            String[] createArgs = Arrays.copyOfRange(args, 1, args.length);
+            handleEventCreate(source, createArgs);
+            return;
+        }
+
+        // else: command unknown
+        sendEventUsage(source);
+    }
+
+    // create event -args: <event_key> <name...>
+    private void handleEventCreate(CommandSource source, String[] args) {
+        if (args.length < 2) {
+            sendCreateUsage(source);
+            return;
+        }
+
+        String eventKey = args[0];
+        String name = joinArgs(args, 1);
+
+        try {
+            database.createEvent(eventKey, name);
+            source.sendMessage(
+                    Component.text("Created event '" + eventKey + "' with name '" + name + "'.")
+            );
+        } catch (EventAlreadyExistsException ex) {
+            source.sendMessage(
+                    Component.text("Event with key '" + eventKey + "' already exists.")
+                            .color(NamedTextColor.RED)
+            );
+
+        } catch (GatewayDatabaseException ex) {
+            source.sendMessage(
+                    Component.text("Database error while creating event: " + ex.getMessage())
+                            .color(NamedTextColor.RED)
+            );
         }
     }
 }
