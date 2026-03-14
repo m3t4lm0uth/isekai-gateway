@@ -11,10 +11,12 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 
+import com.velocitypowered.api.proxy.server.RegisteredServer;
+import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
-import java.sql.SQLException;
+import java.util.Optional;
 import java.util.UUID;
 
 @Plugin(
@@ -59,6 +61,21 @@ public class IsekaiGateway {
         this.gatewayConfig = GatewayConfig.load(dataDirectory, logger);
         this.gatewayDatabase = new GatewayDatabase(logger);
 
+        // init config events
+        try {
+            gatewayDatabase.initConfigEvents(gatewayConfig.getEventKeytoBackend());
+        } catch (GatewayDatabaseException ex) {
+            logger.error("Failed to initialize events from config.conf keys: {}", ex.getMessage(), ex);
+        }
+        
+        // apply config backend mappings
+        try {
+            gatewayDatabase.applyBackendMappings(gatewayConfig.getEventKeytoBackend());
+        } catch (GatewayDatabaseException ex) {
+            logger.error("[isekai-gateway] Failed to apply backend mappings from config.conf: {}", ex.getMessage(), ex);
+        }
+
+        // register custom command
         server.getCommandManager().register(
                 "isekaigateway",
                 new GatewayCommand(server, gatewayDatabase, messages),
@@ -76,37 +93,26 @@ public class IsekaiGateway {
         UUID uuid = player.getUniqueId();
 
         try {
-            // look up (active) event req'd flags for player
-            var requiredKeys = gatewayDatabase.findActiveEventRequiredKeys(uuid);
-
-            if (requiredKeys.isEmpty()) {
-                // none found, revert to normal routing
-                return;
-            }
-
-            // take first event key
-            String eventKey = requiredKeys.getFirst();
-            String backendName = gatewayConfig.getBackendForEventKey(eventKey);
+            String backendName = gatewayDatabase.chooseBackendForPlayer(uuid);
 
             if (backendName == null) {
-                logger.warn("[isekai-gateway] Player {} has been flagged event required for '{}' but no backend mapping is configured.", player.getUsername(), eventKey);
+                // no active req'd events / backend mappings, revert to normal routing
                 return;
             }
 
-            // resolve backend and route player
-            var optionalServer = server.getServer(backendName);
+            Optional<RegisteredServer> optionalServer = server.getServer(backendName);
 
             if (optionalServer.isEmpty()) {
-                logger.warn("[isekai-gateway] Backend '{}' for event '{}' not found; cannot route player {}.", backendName, eventKey, player.getUsername());
+                logger.warn("[isekai-gateway] Backend '{}' not found for player {}. Falling back to default routing.", backendName, player.getUsername());
                 return;
             }
 
             event.setInitialServer(optionalServer.get());
-            logger.info("[isekai-gateway] Routing player {} to backed '{}' for event '{}'.", player.getUsername(), backendName, eventKey);
+            logger.info("[isekai-gateway] Routing player {} to backed '{}' based on event priorities.", player.getUsername(), backendName);
 
-        } catch (SQLException ex) {
+        } catch (GatewayDatabaseException ex) {
             // fallback to normal routing on DB error
-            logger.error("[isekai-gateway] Failed to lookup event flags for {}: {}", player.getUsername(), ex.getMessage(), ex);
+            logger.error("[isekai-gateway] Failed to routing backend for {}: {}", player.getUsername(), ex.getMessage(), ex);
         }
     }
 }

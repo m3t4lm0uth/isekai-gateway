@@ -12,11 +12,10 @@ import org.IFBX.isekaiGateway.exceptions.EventAlreadyExistsException;
 import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
 import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Optional;
 
-// class to build command for admins to manipulate player flags manually
+// class to build command for admins to manipulate player flags / events in-game
 public class GatewayCommand implements SimpleCommand {
 
     private final ProxyServer server;
@@ -46,7 +45,7 @@ public class GatewayCommand implements SimpleCommand {
     // root args
     private void sendRootUsage(CommandSource source) {
         source.sendMessage(
-                Component.text("Usage: /isekaigateway <trigger|clear|event> ...")
+                Component.text("Usage: /isekaigateway <trigger | clear | event> ...")
         );
     }
 
@@ -60,7 +59,7 @@ public class GatewayCommand implements SimpleCommand {
     // event root args
     private void sendEventUsage(CommandSource source) {
         source.sendMessage(
-                Component.text("Usage: /isekaigateway event <create|activate|deactivate|delete|list>")
+                Component.text("Usage: /isekaigateway event <create | activate | deactivate | delete | map | rename | priority | list>")
         );
     }
 
@@ -85,6 +84,28 @@ public class GatewayCommand implements SimpleCommand {
         );
     }
 
+    // event map args
+    private void sendMapUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway event map <event_key> <backend>")
+        );
+    }
+
+    // event rename args
+    private void sendRenameUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway event rename <event_key> <new_name>")
+        );
+    }
+
+    // event priority args
+    private void sendPriorityUsage(CommandSource source) {
+        source.sendMessage(
+                Component.text("Usage: /isekaigateway event priority <event_key> <priority>")
+        );
+    }
+
+    // ------- main methods --------
     // execute: /gw is ran.
     @Override
     public void execute(Invocation invocation) {
@@ -197,12 +218,6 @@ public class GatewayCommand implements SimpleCommand {
 
         String action = args[0];
 
-        // subcommand list
-        if (action.equalsIgnoreCase("list")) {
-            handleEventList(source);
-            return;
-        }
-
         // subcommand create
         if (action.equalsIgnoreCase("create")) {
             String[] createArgs = Arrays.copyOfRange(args, 1, args.length);
@@ -220,6 +235,33 @@ public class GatewayCommand implements SimpleCommand {
         if (action.equalsIgnoreCase("delete")) {
             String[] deleteArgs = Arrays.copyOfRange(args, 1, args.length);
             handleEventDelete(source, deleteArgs);
+            return;
+        }
+
+        //subcommand map
+        if (action.equalsIgnoreCase("map")) {
+            String[] mapArgs = Arrays.copyOfRange(args, 1, args.length);
+            handleEventMap(source, mapArgs);
+            return;
+        }
+
+        //subcommand rename
+        if (action.equalsIgnoreCase("rename")) {
+            String[] renameArgs = Arrays.copyOfRange(args, 1, args.length);
+            handleEventRename(source, renameArgs);
+            return;
+        }
+
+        //subcommand priority
+        if (action.equalsIgnoreCase("priority")) {
+            String[] priorityArgs = Arrays.copyOfRange(args, 1, args.length);
+            handleEventPriority(source, priorityArgs);
+            return;
+        }
+
+        // subcommand list
+        if (action.equalsIgnoreCase("list")) {
+            handleEventList(source);
             return;
         }
 
@@ -243,12 +285,18 @@ public class GatewayCommand implements SimpleCommand {
                     Component.text("Events:")
             );
             for (GatewayDatabase.EventSummary ev : events) {
-                // example format: [active] eventKey - name
+                // example output format: [status] eventKey -> backend - name
+                String formatBackend = (ev.backend() != null && !ev.backend().isEmpty())
+                        ? " -> " + ev.backend()
+                        : "";
+
                 String line = String.format(
-                        "[%s] %s - %s",
+                        "[%s] [prio = %d] %s%s - %s",
                         ev.status(),
+                        ev.priority(),
+                        ev.name(),
                         ev.eventKey(),
-                        ev.name()
+                        formatBackend
                 );
                 source.sendMessage(
                         Component.text(line)
@@ -351,6 +399,101 @@ public class GatewayCommand implements SimpleCommand {
         } catch (GatewayDatabaseException ex) {
             source.sendMessage(
                     Component.text("Database error while deleting event: " + ex.getMessage())
+                            .color(NamedTextColor.RED)
+            );
+        }
+    }
+
+    // map event backend
+    private void handleEventMap(CommandSource source, String[] args) {
+        if (args.length != 2) {
+            sendMapUsage(source);
+            return;
+        }
+
+        String eventKey = args[0];
+        String backend = args[1];
+
+        try {
+            database.mapEventBackend(eventKey, backend);
+            source.sendMessage(
+                    Component.text("Mapped event '" + eventKey + "' to backend '" + backend + "'.")
+            );
+        } catch (EventNotFoundException ex) {
+            source.sendMessage(
+                    Component.text("No event found with key '" + eventKey + "'.")
+                            .color(NamedTextColor.RED)
+            );
+        } catch (GatewayDatabaseException ex) {
+            source.sendMessage(
+                    Component.text("Database error while mapping backend: " + ex.getMessage())
+                            .color(NamedTextColor.RED)
+            );
+        }
+    }
+
+    // rename event
+    private void handleEventRename(CommandSource source, String[] args) {
+        if (args.length < 2) {
+            sendRenameUsage(source);
+            return;
+        }
+
+        String eventKey = args[0];
+        String newName = joinArgs(args, 1);
+
+        try {
+            database.renameEvent(eventKey, newName);
+            source.sendMessage(
+                    Component.text("Renamed event '" + eventKey + "' to '" + newName + "'.")
+            );
+        } catch (EventNotFoundException ex) {
+            source.sendMessage(
+                    Component.text("No event found with key '" + eventKey + "'.")
+                            .color(NamedTextColor.RED)
+            );
+        } catch (GatewayDatabaseException ex) {
+            source.sendMessage(
+                    Component.text("Database error while renaming event: " + ex.getMessage())
+                            .color(NamedTextColor.RED)
+            );
+        }
+    }
+
+    // set event priority
+    private void handleEventPriority(CommandSource source, String[] args) {
+        if (args.length < 2) {
+            sendPriorityUsage(source);
+            return;
+        }
+
+        String eventKey = args[0];
+        String rawPrio = args[1];
+        int priority;
+
+        try {
+            priority = Integer.parseInt(rawPrio);
+        } catch (NumberFormatException ex) {
+            source.sendMessage(
+                    Component.text("Priority must be an integer, got '" + rawPrio + "'.")
+                            .color(NamedTextColor.RED)
+            );
+            return;
+        }
+
+        try {
+            database.setEventPriority(eventKey, priority);
+            source.sendMessage(
+                    Component.text("Set priority " + priority + " for event '" + eventKey + "'.")
+            );
+        } catch (EventNotFoundException ex) {
+            source.sendMessage(
+                    Component.text("No event found with key '" + eventKey + "'.")
+                            .color(NamedTextColor.RED)
+            );
+        } catch (GatewayDatabaseException ex) {
+            source.sendMessage(
+                    Component.text("Database error while setting priority: " + ex.getMessage())
                             .color(NamedTextColor.RED)
             );
         }
