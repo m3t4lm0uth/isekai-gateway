@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "isekai_api",
+  "version": "1.0.1-alpha",
+  "name": "Isekai API",
+  "description": "Shared network protocol for Isekai Gateway.",
+  "authors": [
+    "m3t4lm0uth"
+  ],
+  "license": "GPL-3.0",
+  "environment": "*",
+  "contact": {
+    "homepage": "https://fabricmc.net/",
+    "sources": "https://github.com/FabricMC/fabric-example-mod"
+  },
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": "1.21.1",
+    "java": ">=21"
+  },
+  "entrypoints": {}
+}
