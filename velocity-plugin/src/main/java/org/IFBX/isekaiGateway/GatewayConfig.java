@@ -1,11 +1,5 @@
 package org.IFBX.isekaiGateway;
 
-import com.typesafe.config.Config;
-import com.typesafe.config.ConfigFactory;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -13,16 +7,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class GatewayConfig {
+import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-    // var init
+// read config file and map values
+public class GatewayConfig {
+    // ------- fields -------
     private static final Logger logger = LoggerFactory.getLogger(GatewayConfig.class);
+
     private final Map<String, String> eventKeytoBackend;
 
     private GatewayConfig(Map<String, String> eventKeytoBackend) {
         this.eventKeytoBackend = eventKeytoBackend;
     }
 
+    // ------- main methods -------
+    // parse config file
     public static GatewayConfig load(Path dataDirectory, Logger logger) {
         File configFile = dataDirectory.resolve("config.conf").toFile();
 
@@ -50,6 +52,7 @@ public class GatewayConfig {
         return new GatewayConfig(Collections.unmodifiableMap(mapping));
     }
 
+    // map event key to backend
     public Map<String, String> getEventKeytoBackend() {
         return eventKeytoBackend;
     }

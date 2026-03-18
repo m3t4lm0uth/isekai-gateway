@@ -1,18 +1,22 @@
 package org.IFBX.isekaiGateway.api;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInput;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Objects;
 import java.util.UUID;
 
-// define how the payload is encoded
+// static-only utility class; defines how the payload is encoded
 public class GoddessPayloadCodec {
-    // static-only utility class
-    private GoddessPayloadCodec() {}
-
+    // ------- fields -------
     // loader neutral decoded rep.
     public record Message(byte opCode, UUID playerUuid, String actionKey) {}
 
+    // constructor
+    private GoddessPayloadCodec() {}
+
+    // ------- main methods -------
     // build message with standard layout: [opCode][UUID msb][UUID lsb][actionKey UTF]
     public static byte[] buildMessage(byte opCode, UUID playerUuid, String actionKey) {
         // arg validation
@@ -33,7 +37,7 @@ public class GoddessPayloadCodec {
         return baos.toByteArray();
     }
 
-    // decode message from [opCode][UUID msb][UUID lsb][actionKey UTF]
+    // decode message from standard layout
     public static Message decode(DataInput in) throws IOException {
         byte opCode = in.readByte();
         long msb = in.readLong();

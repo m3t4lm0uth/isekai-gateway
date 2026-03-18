@@ -1,19 +1,18 @@
 package org.IFBX.isekaiGateway.api;
 
-// define what the protocol is
+// static-only utility class; defines protocol
 public final class GoddessProtocol {
-    // static-only utility class
-    private GoddessProtocol() {}
-
-    // ------ var init ------
+    // ------ fields ------
     // protocol version for if/when wire format evolves
     public static final byte PROTOCOL_VERSION = 1;
-    // init messaging channel
+    // messaging channel
     public static final String CHANNEL_NAMESPACE = "isekai";
     public static final String CHANNEL_NAME = "gateway";
     public static final String CHANNEL_ID = CHANNEL_NAMESPACE + ":" + CHANNEL_NAME;
-
+    // operation codes
     public static final byte OP_TRIGGER = 0x01;
     public static final byte OP_CLEAR = 0x02;
 
+    // constructor
+    private GoddessProtocol() {}
 }

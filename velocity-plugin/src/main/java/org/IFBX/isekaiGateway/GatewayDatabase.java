@@ -1,25 +1,32 @@
 package org.IFBX.isekaiGateway;
 
-import net.kyori.adventure.title.Title;
-import org.IFBX.isekaiGateway.exceptions.EventAlreadyExistsException;
-import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
-import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-
+import org.IFBX.isekaiGateway.exceptions.EventAlreadyExistsException;
+import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
+import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 import org.slf4j.Logger;
-
-import java.sql.*;
-import java.util.*;
 
 // db access / manipulation code
 public class GatewayDatabase {
 
-    // var init
+    // ------- fields -------
     private final HikariDataSource dataSource;
     private final Logger logger;
 
+    // ------- constructor & lifecycle -------
     // configure connection pool (HikariCP) using env vars from velocity container
     public GatewayDatabase(Logger logger) {
         this.logger = logger;
@@ -54,43 +61,6 @@ public class GatewayDatabase {
         dataSource.close();
     }
 
-    // helper: resolve event_id by event_key
-    private Long findEventIdByKey(Connection conn, String eventKey) throws SQLException {
-        String sql = """
-                select id
-                from isekai_gw.events
-                where event_key = ?
-                """;
-
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, eventKey);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getLong("id");
-                }
-                return null;
-            }
-        }
-    }
-
-    // helper: resolve action_id by action_key
-    private Long findActionIdByKey(Connection conn, String actionKey) throws SQLException {
-        String sql = """
-                select id
-                from isekai_gw.actions
-                where action_key = ?
-                """;
-
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, actionKey);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getLong("id");
-                }
-                return null;
-            }
-        }
-    }
 
     // ------- config.conf translation
     // config events init
@@ -228,8 +198,8 @@ public class GatewayDatabase {
             );
         }
     }
-    // ------- listing -------
-    // helper: event data holder
+    // ------- listing (RO) queries -------
+    // event data holder
     public static record EventSummary(
             String eventKey,
             String name,
@@ -290,7 +260,7 @@ public class GatewayDatabase {
         return result;
     }
 
-    // helper: actions data holder
+    // actions data holder
     public static record ActionSummary(
             String actionKey,
             String description,
@@ -335,7 +305,7 @@ public class GatewayDatabase {
         return result;
     }
 
-    // helper: flag data holder
+    // flag data holder
     public static record PlayerFlagSummary(
             UUID playerUuid,
             String eventKey,
@@ -389,7 +359,7 @@ public class GatewayDatabase {
         return result;
     }
 
-    // ------- event modifications ------
+    // ------- event data modifications ------
     // create new event
     public void createEvent(String eventKey, String name) throws EventAlreadyExistsException, GatewayDatabaseException {
         String sql = """
@@ -443,12 +413,12 @@ public class GatewayDatabase {
         }
     }
 
-    // helper: activate event
+    // activate event
     public void activateEvent(String eventKey) throws EventNotFoundException, GatewayDatabaseException {
         setEventStatus(eventKey, "active");
     }
 
-    // helper: deactivate event
+    // deactivate event
     public void deactivateEvent(String eventKey) throws EventNotFoundException, GatewayDatabaseException {
         setEventStatus(eventKey, "inactive");
     }
@@ -555,7 +525,7 @@ public class GatewayDatabase {
         }
     }
 
-    // ------- event trigger related -------
+    // ------- action/trigger mapping -------
     // flag all events mapped to action_key as required for given player
     public void triggerMarkEventsRequired(UUID playerUuid, String actionKey) throws GatewayDatabaseException, EventNotFoundException {
         String sql = """
@@ -761,7 +731,7 @@ public class GatewayDatabase {
         }
     }
 
-    // player routing
+    // ------- routing -------
     public String chooseBackendForPlayer(UUID playerUuid) throws GatewayDatabaseException {
         String sql = """
                 select e.backend
@@ -792,6 +762,45 @@ public class GatewayDatabase {
             throw new GatewayDatabaseException(
                     "Failed to find backend for player.", ex
             );
+        }
+    }
+
+    // ------- helpers -------
+    // re  solve event_id by event_key
+    private Long findEventIdByKey(Connection conn, String eventKey) throws SQLException {
+        String sql = """
+                select id
+                from isekai_gw.events
+                where event_key = ?
+                """;
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, eventKey);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong("id");
+                }
+                return null;
+            }
+        }
+    }
+
+    // resolve action_id by action_key
+    private Long findActionIdByKey(Connection conn, String actionKey) throws SQLException {
+        String sql = """
+                select id
+                from isekai_gw.actions
+                where action_key = ?
+                """;
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, actionKey);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong("id");
+                }
+                return null;
+            }
         }
     }
 }

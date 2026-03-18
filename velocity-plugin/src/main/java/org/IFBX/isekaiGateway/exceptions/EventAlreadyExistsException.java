@@ -1,7 +1,7 @@
 package org.IFBX.isekaiGateway.exceptions;
 
+// handle key already exists failure
 public class EventAlreadyExistsException extends Exception {
-    // handle key already exists failure
     public EventAlreadyExistsException(String eventKey) {
         super("Event already exists with key: " + eventKey);
     }

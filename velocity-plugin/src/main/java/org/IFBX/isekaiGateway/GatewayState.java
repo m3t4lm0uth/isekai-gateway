@@ -4,7 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-// class for managing player flags
+// [DEPRECATED] class for managing player flags
 public class GatewayState {
     private final Set<UUID> eventRequiredPlayers = ConcurrentHashMap.newKeySet();
 

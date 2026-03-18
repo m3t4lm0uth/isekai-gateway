@@ -6,10 +6,13 @@ import org.IFBX.isekaiGateway.isekaiBackendModern.CommonActions;
 import org.IFBX.isekaiGateway.isekaiBackendModern.Constants;
 import org.IFBX.isekaiGateway.isekaiBackendModern.FabricGoddessProtocol;
 
-public class FabricHardcoreDeathTrigger {
-    // static-only utility class
-    private FabricHardcoreDeathTrigger() {}
+// static-only utility class to register hardcore-death action for fabric backends
+public class FabricHardcoreDeathAction {
+    // ------- fields -------
+    // constructor
+    private FabricHardcoreDeathAction() {}
 
+    // ------- main method -------
     // register hardcore death trigger
     public static void register() {
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {

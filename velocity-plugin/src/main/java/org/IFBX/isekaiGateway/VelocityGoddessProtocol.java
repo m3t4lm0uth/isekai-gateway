@@ -1,26 +1,23 @@
 package org.IFBX.isekaiGateway;
 
-import org.IFBX.isekaiGateway.api.GoddessProtocol;
-import org.IFBX.isekaiGateway.api.GoddessPayloadCodec;
-import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
-import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
-
-import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.connection.PluginMessageEvent;
-import com.velocitypowered.api.proxy.ServerConnection;
-import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
-
-import org.slf4j.Logger;
-
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.UUID;
 
+import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.connection.PluginMessageEvent;
+import com.velocitypowered.api.proxy.ServerConnection;
+import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
+import org.IFBX.isekaiGateway.api.GoddessPayloadCodec;
+import org.IFBX.isekaiGateway.api.GoddessProtocol;
+import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
+import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
+import org.slf4j.Logger;
+
 // handle backend -> proxy gw plugin messages
 public class VelocityGoddessProtocol {
-
-    // var init
+    // ------- fields -------
     private final ChannelIdentifier channel;
     private final GatewayDatabase database;
     private final Logger logger;
@@ -32,35 +29,7 @@ public class VelocityGoddessProtocol {
         this.logger = logger;
     }
 
-    // readVarInt helper
-    private static int readVarInt(DataInputStream in) throws IOException {
-        int numRead = 0;
-        int result = 0;
-        byte read;
-        do {
-            // read next raw byte from the stream
-            read = in.readByte();
-
-            // keep only the 7 low bits (0-6) that correspond to our data
-            // shift them into correct position
-            // first: shift 0
-            // second: shift 7
-            // third: shift 14
-            // etc.
-            int value = (read & 0b0111_1111);
-            result |= (value << (7 * numRead));
-
-            numRead ++;
-
-            // guard against malformed / maliciously long encodings; VarInt is at most 5 bytes for a 32-bit int
-            if (numRead > 5) {
-                throw new IOException("[isekai-gateway] VarInt is too big.");
-            }
-        } while ((read & 0b1000_0000) != 0); // if high bit (bit 7) is set, there is another byte to be read
-
-        return result;
-    }
-
+    // ------- main methods -------
     // read plugin message
     @Subscribe
     public void onPluginMessage(PluginMessageEvent event) {
@@ -164,5 +133,35 @@ public class VelocityGoddessProtocol {
                     backendName, eventKey, username, playerUuid, ex.getMessage(), ex
             );
         }
+    }
+
+    // ------- helpers -------
+    // find VarInt
+    private static int readVarInt(DataInputStream in) throws IOException {
+        int numRead = 0;
+        int result = 0;
+        byte read;
+        do {
+            // read next raw byte from the stream
+            read = in.readByte();
+
+            // keep only the 7 low bits (0-6) that correspond to our data
+            // shift them into correct position
+            // first: shift 0
+            // second: shift 7
+            // third: shift 14
+            // etc.
+            int value = (read & 0b0111_1111);
+            result |= (value << (7 * numRead));
+
+            numRead ++;
+
+            // guard against malformed / maliciously long encodings; VarInt is at most 5 bytes for a 32-bit int
+            if (numRead > 5) {
+                throw new IOException("[isekai-gateway] VarInt is too big.");
+            }
+        } while ((read & 0b1000_0000) != 0); // if high bit (bit 7) is set, there is another byte to be read
+
+        return result;
     }
 }

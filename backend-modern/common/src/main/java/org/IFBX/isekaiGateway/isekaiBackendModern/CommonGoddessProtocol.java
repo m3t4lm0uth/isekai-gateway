@@ -1,9 +1,7 @@
 package org.IFBX.isekaiGateway.isekaiBackendModern;
 
-// common helper for building isekai-gateway messages from backend servers
+// [DEPRECATED (?)] static-only utility class for building isekai-gateway messages from backend servers
 public class CommonGoddessProtocol {
-
-    // static-only utility class
+    // constructor
     private CommonGoddessProtocol() {}
-
 }

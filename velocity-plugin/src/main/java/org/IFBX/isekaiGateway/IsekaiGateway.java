@@ -1,8 +1,8 @@
 package org.IFBX.isekaiGateway;
 
-import org.IFBX.isekaiGateway.api.GoddessProtocol;
-import org.IFBX.isekaiGateway.commands.GatewayCommand;
-import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
+import java.nio.file.Path;
+import java.util.Optional;
+import java.util.UUID;
 
 import com.google.inject.Inject;
 
@@ -20,9 +20,9 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 
 import org.slf4j.Logger;
 
-import java.nio.file.Path;
-import java.util.Optional;
-import java.util.UUID;
+import org.IFBX.isekaiGateway.api.GoddessProtocol;
+import org.IFBX.isekaiGateway.commands.GatewayCommand;
+import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 
 @Plugin(
         id = "isekai-gateway",
@@ -33,16 +33,18 @@ import java.util.UUID;
 
 // main class
 public class IsekaiGateway {
+    // ------- fields -------
+    private static final ChannelIdentifier ISEKAI_CHANNEL = MinecraftChannelIdentifier.from(GoddessProtocol.CHANNEL_ID);
 
     private final ProxyServer server;
     private final Logger logger;
     private final Path dataDirectory;
-    private final GatewayMessenger messages = new GatewayMessenger();
+    private final GoddessMessenger messages = new GoddessMessenger();
+
     private GatewayConfig gatewayConfig;
     private GatewayDatabase gatewayDatabase;
-    private static final ChannelIdentifier ISEKAI_CHANNEL = MinecraftChannelIdentifier.from(GoddessProtocol.CHANNEL_ID);
 
-    // constructor, creates ProxyServer and Logger, loads directory
+    // constructor
     @Inject
     public IsekaiGateway(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
         this.server = server;
@@ -50,17 +52,11 @@ public class IsekaiGateway {
         this.dataDirectory = dataDirectory;
     }
 
-    // clean shutdown of db
-    @Subscribe
-    public void onProxyShutdown(ProxyShutdownEvent event) {
-        if (gatewayDatabase != null) {
-            gatewayDatabase.close();
-        }
-    }
-
-    // create gw command when proxy initializes
+    // ------- methods -------
+    //  initialization
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
+        // ======= config =======
         // load config first
         this.gatewayConfig = GatewayConfig.load(dataDirectory, logger);
         this.gatewayDatabase = new GatewayDatabase(logger);
@@ -71,7 +67,7 @@ public class IsekaiGateway {
         } catch (GatewayDatabaseException ex) {
             logger.error("Failed to initialize events from config.conf keys: {}", ex.getMessage(), ex);
         }
-        
+
         // apply config backend mappings
         try {
             gatewayDatabase.applyBackendMappings(gatewayConfig.getEventKeytoBackend());
@@ -79,12 +75,14 @@ public class IsekaiGateway {
             logger.error("[isekai-gateway] Failed to apply backend mappings from config.conf: {}", ex.getMessage(), ex);
         }
 
-        // create and register plugin messaging channel for receiving backend signals as an event listener
+        // ======= messaging channel =======
+        // create and register plugin messaging channel for receiving backend signals
         server.getChannelRegistrar().register(ISEKAI_CHANNEL);
         VelocityGoddessProtocol goddess = new VelocityGoddessProtocol(ISEKAI_CHANNEL, gatewayDatabase, logger);
         server.getEventManager().register(this, goddess);
 
-        // register custom command
+        // ======= custom command =======
+        // register /isekaigateway (alias /gw)
         server.getCommandManager().register(
                 "isekaigateway",
                 new GatewayCommand(server, gatewayDatabase, messages),
@@ -94,13 +92,14 @@ public class IsekaiGateway {
         logger.info("[isekai-gateway] Isekai Gateway initialized. /isekaigateway command registered.");
     }
 
-    // route flagged players to event server
+    // server routing
     @Subscribe
     public void onChooseInitialServer(PlayerChooseInitialServerEvent event) {
 
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
+        // find optimal backend and route flagged players
         try {
             String backendName = gatewayDatabase.chooseBackendForPlayer(uuid);
 
@@ -117,11 +116,19 @@ public class IsekaiGateway {
             }
 
             event.setInitialServer(optionalServer.get());
-            logger.info("[isekai-gateway] Routing player {} to backed '{}' based on event priorities.", player.getUsername(), backendName);
+            logger.info("[isekai-gateway] Routing player {} to backend '{}' based on event priorities.", player.getUsername(), backendName);
 
         } catch (GatewayDatabaseException ex) {
             // fallback to normal routing on DB error
-            logger.error("[isekai-gateway] Failed to routing backend for {}: {}", player.getUsername(), ex.getMessage(), ex);
+            logger.error("[isekai-gateway] Failed to route {} to backend: {}", player.getUsername(), ex.getMessage(), ex);
+        }
+    }
+
+    // clean shutdown of db
+    @Subscribe
+    public void onProxyShutdown(ProxyShutdownEvent event) {
+        if (gatewayDatabase != null) {
+            gatewayDatabase.close();
         }
     }
 }
