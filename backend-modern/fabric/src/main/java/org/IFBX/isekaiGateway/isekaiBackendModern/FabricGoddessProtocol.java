@@ -3,8 +3,8 @@ package org.IFBX.isekaiGateway.isekaiBackendModern;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
-import org.IFBX.isekaiGateway.api.GoddessPayloadCodec;
-import org.IFBX.isekaiGateway.api.GoddessProtocol;
+import org.IFBX.isekaiGateway.api.networking.GoddessPayloadCodec;
+import org.IFBX.isekaiGateway.api.networking.GoddessProtocol;
 
 // static-only utility class; message builder / sender
 public class FabricGoddessProtocol {
@@ -22,12 +22,12 @@ public class FabricGoddessProtocol {
     }
 
     // build, wrap, and send message
-    public static void sendTrigger(ServerPlayerEntity player, String actionKey) {
+    public static void sendTrigger(ServerPlayerEntity player, String triggerKey) {
         // build backend -> proxy message via shared codec
-        byte[] payloadBytes = GoddessPayloadCodec.buildMessage(
+        byte[] payloadBytes = GoddessPayloadCodec.buildPlayerMessage(
                 GoddessProtocol.OP_TRIGGER,
                 player.getUuid(),
-                actionKey
+                triggerKey
         );
 
         // wrap in fabric payload and send

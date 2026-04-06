@@ -4,7 +4,7 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.util.Identifier;
-import org.IFBX.isekaiGateway.api.GoddessProtocol;
+import org.IFBX.isekaiGateway.api.networking.GoddessProtocol;
 
 // fabric side wrapper for raw isekai-gateway payload bytes.
 // implements 1.21 CustomPayload interface so can be sent with ServerPlayNetworking.
@@ -30,7 +30,7 @@ public record FabricGoddessPayload(byte[] data) implements CustomPayload {
                 }
             };
 
-    // type object to couple ID and CODEC
+    // type object to couple TRIGGER_KEY and CODEC
     public static final CustomPayload.Type<PacketByteBuf, FabricGoddessPayload> TYPE =
             new CustomPayload.Type<>(ID, CODEC);
 

@@ -148,7 +148,7 @@ public class GatewayDatabase {
         }
     }
     
-    // bulk apply mappings
+    // bulk apply mappings from config
     public void applyBackendMappings (Map<String, String> eventKeyToBackend) throws GatewayDatabaseException {
         String sql = """
                 update isekai_gw.events
@@ -219,17 +219,17 @@ public class GatewayDatabase {
                     e.status,
                     e.backend,
                     e.priority,
-                    string_agg(a.action_key, ', ' order by a.action_key) filter (
-                        where m.action_type = 'mark_required'
+                    string_agg(t.trigger_key, ', ' order by t.trigger_key) filter (
+                        where m.flag_operation = 'mark_required'
                     ) as triggers,
-                    string_agg(a.action_key, ', ' order by a.action_key) filter (
-                        where m.action_type = 'clear_required'
+                    string_agg(t.trigger_key, ', ' order by t.trigger_key) filter (
+                        where m.flag_operation = 'clear_required'
                     ) as clears
                 from isekai_gw.events e
-                left join isekai_gw.event_action_mappings m
+                left join isekai_gw.event_trigger_mappings m
                     on m.event_id = e.id
-                left join isekai_gw.actions a
-                    on a.id = m.action_id
+                left join isekai_gw.triggers t
+                    on t.id = m.trigger_id
                 group by e.id, e.event_key, e.name, e.status, e.backend, e.priority
                 order by e.name, e.priority, e.status desc
                 """;
@@ -260,45 +260,45 @@ public class GatewayDatabase {
         return result;
     }
 
-    // actions data holder
-    public static record ActionSummary(
-            String actionKey,
+    // triggers data holder
+    public static record TriggerSummary(
+            String triggerKey,
             String description,
             String events
     ) {}
 
-    // list all actions
-    public List<ActionSummary> listActions() throws GatewayDatabaseException {
+    // list all triggers
+    public List<TriggerSummary> listTriggers() throws GatewayDatabaseException {
         String sql = """
                 select
-                   a.action_key,
-                   a.description,
+                   t.trigger_key,
+                   t.description,
                    string_agg(distinct e.event_key, ', ' order by e.event_key) as events
-                from isekai_gw.actions a
-                left join isekai_gw.event_action_mappings m
-                    on m.action_id = a.id
+                from isekai_gw.triggers t
+                left join isekai_gw.event_trigger_mappings m
+                    on m.trigger_id = t.id
                 left join isekai_gw.events e
                     on e.id = m.event_id
-                group by a.id, a.action_key, a.description
-                order by a.action_key
+                group by t.id, t.trigger_key, t.description
+                order by t.trigger_key
                 """;
 
-        List<ActionSummary> result = new ArrayList<>();
+        List<TriggerSummary> result = new ArrayList<>();
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()
         ) {
             while (rs.next()) {
-                String actionKey = rs.getString("action_key");
+                String triggerKey = rs.getString("trigger_key");
                 String description = rs.getString("description");
                 String events = rs.getString("events");
 
-                result.add(new ActionSummary(actionKey, description, events));
+                result.add(new TriggerSummary(triggerKey, description, events));
             }
         } catch (SQLException ex ) {
             throw new GatewayDatabaseException(
-                    "Failed to list actions.", ex
+                    "Failed to list triggers.", ex
             );
         }
 
@@ -525,18 +525,57 @@ public class GatewayDatabase {
         }
     }
 
-    // ------- action/trigger mapping -------
-    // flag all events mapped to action_key as required for given player
-    public void triggerMarkEventsRequired(UUID playerUuid, String actionKey) throws GatewayDatabaseException, EventNotFoundException {
+    // ------- trigger related -------
+    // sync trigger registry from backend
+    public void syncTriggers(List<String> triggerKeys) throws GatewayDatabaseException {
+        if (triggerKeys == null || triggerKeys.isEmpty()) {
+            return;
+        }
+
+        String sql = """
+                insert into isekai_gw.triggers (trigger_key)
+                values (?)
+                on conflict (trigger_key) do nothing
+                """;
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)
+        ){
+            conn.setAutoCommit(false);
+
+            try {
+                for (String key : triggerKeys) {
+                    if (key == null || key.isBlank()) {
+                        continue;
+                    }
+                    ps.setString(1, key);
+                    ps.addBatch();
+                }
+
+                ps.executeBatch();
+                conn.commit();
+            } catch (SQLException ex) {
+                conn.rollback();
+                throw new GatewayDatabaseException("Failed to sync triggers from backend.", ex);
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException ex) {
+            throw new GatewayDatabaseException("Failed to obtain connection.", ex);
+        }
+    }
+
+    // flag all events mapped to trigger_key as required for given player
+    public void triggerMarkEventsRequired(UUID playerUuid, String triggerKey) throws GatewayDatabaseException, EventNotFoundException {
         String sql = """
                 select e.event_key
-                from isekai_gw.event_action_mappings m
+                from isekai_gw.event_trigger_mappings m
                 join isekai_gw.events e
                     on e.id = m.event_id
-                join isekai_gw.actions a
-                    on a.id = m.action_id
-                where a.action_key = ?
-                    and m.action_type = 'mark_required'
+                join isekai_gw.triggers t
+                    on t.id = m.trigger_id
+                where t.trigger_key = ?
+                    and m.flag_operation = 'mark_required'
                 """;
 
         List<String> eventKeys = new ArrayList<>();
@@ -545,7 +584,7 @@ public class GatewayDatabase {
              PreparedStatement ps = conn.prepareStatement(sql)
         ){
 
-            ps.setString(1, actionKey);
+            ps.setString(1, triggerKey);
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -555,13 +594,13 @@ public class GatewayDatabase {
 
         } catch (SQLException ex) {
             throw new GatewayDatabaseException(
-                    "Failed to load events for action key: " + actionKey, ex
+                    "Failed to find mapped events for trigger key: " + triggerKey, ex
             );
         }
 
-        // no such action config found
+        // no such trigger config found
         if (eventKeys.isEmpty()) {
-            throw new EventNotFoundException(actionKey);
+            throw new EventNotFoundException(triggerKey);
         }
 
         // use existing flag logic for each mapped event found
@@ -571,14 +610,14 @@ public class GatewayDatabase {
 
     }
 
-    // map action to event for mark_required
-    public void mapEventTrigger(String eventKey, String actionKey) throws EventNotFoundException, GatewayDatabaseException {
+    // map trigger to event for mark_required
+    public void mapEventTrigger(String eventKey, String triggerKey) throws EventNotFoundException, GatewayDatabaseException {
 
-        // insert action key
+        // insert trigger key
         String insertSql = """
-                insert into isekai_gw.event_action_mappings (event_id, action_id, action_type)
+                insert into isekai_gw.event_trigger_mappings (event_id, trigger_id, flag_operation)
                 values (?, ?, 'mark_required')
-                on conflict (event_id, action_id, action_type) do nothing
+                on conflict (event_id, trigger_id, flag_operation) do nothing
                 """;
 
         try (Connection conn = dataSource.getConnection()) {
@@ -590,23 +629,23 @@ public class GatewayDatabase {
                     throw new EventNotFoundException(eventKey);
                 }
 
-                Long actionId = findActionIdByKey(conn, actionKey);
-                if (actionId == null) {
+                Long triggerId = findTriggerIdByKey(conn, triggerKey);
+                if (triggerId == null) {
                     throw new GatewayDatabaseException(
-                    "No action found with key '" + actionKey + "'. Please register it first.", null
+                    "No trigger found with key '" + triggerKey + "'. Please register it first.", null
                     );
                 }
 
                 // debug
                 logger.debug(
-                        "[isekai-gateway] Mapping action '{}' (id = {}) to event '{}' (event_id={})",
-                        actionKey, actionId, eventKey, eventId
+                        "[isekai-gateway] Mapping trigger '{}' (id = {}) to event '{}' (event_id={})",
+                        triggerKey, triggerId, eventKey, eventId
                 );
 
                 // insert mapping
                 try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
                     ps.setLong(1, eventId);
-                    ps.setLong(2, actionId);
+                    ps.setLong(2, triggerId);
                     ps.executeUpdate();
                 }
 
@@ -615,15 +654,15 @@ public class GatewayDatabase {
             } catch (SQLException ex) {
                 conn.rollback();
                 logger.error(
-                        "[isekai-gateway] Failed to map action '{}' to event '{}'. SQLState={}, errorCode={}",
-                        actionKey,
+                        "[isekai-gateway] Failed to map trigger '{}' to event '{}'. SQLState={}, errorCode={}",
+                        triggerKey,
                         eventKey,
                         ex.getSQLState(),
                         ex.getErrorCode(),
                         ex
                 );
                 throw new GatewayDatabaseException(
-                        "Failed to map action '" + actionKey + "' to event '" + eventKey + "'.", ex
+                        "Failed to map trigger '" + triggerKey + "' to event '" + eventKey + "'.", ex
                 );
 
             } finally {
@@ -785,16 +824,16 @@ public class GatewayDatabase {
         }
     }
 
-    // resolve action_id by action_key
-    private Long findActionIdByKey(Connection conn, String actionKey) throws SQLException {
+    // resolve trigger_id by trigger_key
+    private Long findTriggerIdByKey(Connection conn, String triggerKey) throws SQLException {
         String sql = """
                 select id
-                from isekai_gw.actions
-                where action_key = ?
+                from isekai_gw.triggers
+                where trigger_key = ?
                 """;
 
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, actionKey);
+            ps.setString(1, triggerKey);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return rs.getLong("id");

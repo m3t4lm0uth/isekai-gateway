@@ -2,8 +2,11 @@ package org.IFBX.isekaiGateway.isekaiBackendModern;
 
 
 import net.fabricmc.api.ModInitializer;
-import org.IFBX.isekaiGateway.isekaiBackendModern.actionLogic.FabricHardcoreDeathAction;
+import org.IFBX.isekaiGateway.api.triggerLogic.TriggerRegistry;
+import org.IFBX.isekaiGateway.isekaiBackendModern.triggerLogic.FabricHardcoreDeathTrigger;
+import org.IFBX.isekaiGateway.isekaiBackendModern.triggerLogic.TriggerBootstrap;
 
+// main class
 public class FabricGatewayGoddess implements ModInitializer {
     
     @Override
@@ -11,8 +14,14 @@ public class FabricGatewayGoddess implements ModInitializer {
         // bootstrap the common mod.
         CommonClass.init();
 
-        // register networking and actions
+        // register networking
         FabricGoddessProtocol.register();
-        FabricHardcoreDeathAction.register();
+
+        // create registry and fill with trigger definitions
+        TriggerRegistry registry = new TriggerRegistry(); // in-memory catalog of all triggers discovered on startup
+        TriggerBootstrap.loadAll(registry);
+
+        // register trigger event-listeners
+        FabricHardcoreDeathTrigger.register();
     }
 }

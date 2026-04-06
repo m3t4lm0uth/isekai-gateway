@@ -3,7 +3,7 @@
   "id": "isekai_api",
   "version": "1.0.1-alpha",
   "name": "Isekai API",
-  "description": "Shared network protocol for Isekai Gateway.",
+  "description": "API for Isekai Gateway.",
   "authors": [
     "m3t4lm0uth"
   ],

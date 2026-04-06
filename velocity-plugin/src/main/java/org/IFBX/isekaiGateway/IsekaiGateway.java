@@ -20,7 +20,7 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 
 import org.slf4j.Logger;
 
-import org.IFBX.isekaiGateway.api.GoddessProtocol;
+import org.IFBX.isekaiGateway.api.networking.GoddessProtocol;
 import org.IFBX.isekaiGateway.commands.GatewayCommand;
 import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 

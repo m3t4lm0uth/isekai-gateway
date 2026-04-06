@@ -13,7 +13,7 @@ import org.IFBX.isekaiGateway.GoddessMessenger;
 import org.IFBX.isekaiGateway.PlayerFlagFilter;
 import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 
-// commands for admins to list actions / events / player flags in-game
+// commands for admins to list triggers / events / player flags in-game
 public class ListSubHandler {
     // ------- fields -------
     private final ProxyServer server;
@@ -36,9 +36,9 @@ public class ListSubHandler {
 
         String target = args[0];
 
-        // subcommand actions
-        if (target.equalsIgnoreCase("actions")) {
-            handleListActions(source);
+        // subcommand triggers
+        if (target.equalsIgnoreCase("triggers")) {
+            handleListTriggers(source);
             return;
         }
 
@@ -110,27 +110,27 @@ public class ListSubHandler {
         }
     }
 
-    // list actions
-    private void handleListActions(CommandSource source) {
+    // list triggers
+    private void handleListTriggers(CommandSource source) {
         try {
-            var actions = database.listActions();
+            var triggers = database.listTriggers();
 
-            if (actions.isEmpty()) {
+            if (triggers.isEmpty()) {
                 source.sendMessage(
-                        Component.text("No actions registered.")
+                        Component.text("No triggers registered.")
                 );
                 return;
             }
 
             source.sendMessage(
-                    Component.text("Actions:")
+                    Component.text("Triggers:")
             );
 
             // build list display
-            for (GatewayDatabase.ActionSummary a : actions) {
+            for (GatewayDatabase.TriggerSummary a : triggers) {
                 // format display
                 StringBuilder sb = new StringBuilder();
-                sb.append('[').append(a.actionKey()).append(']');;
+                sb.append('[').append(a.triggerKey()).append(']');;
                 if (a.description() != null && !a.description().isEmpty()) {
                     sb.append(" [description: ").append(a.description()).append(']');
                 }
@@ -142,7 +142,7 @@ public class ListSubHandler {
 
         } catch (GatewayDatabaseException ex) {
             source.sendMessage(
-                    Component.text("Database error while listing actions: " + ex.getMessage())
+                    Component.text("Database error while listing triggers: " + ex.getMessage())
                             .color(NamedTextColor.RED)
             );
         }

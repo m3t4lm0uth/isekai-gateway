@@ -3,14 +3,16 @@ package org.IFBX.isekaiGateway;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.List;
 import java.util.UUID;
 
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
-import org.IFBX.isekaiGateway.api.GoddessPayloadCodec;
-import org.IFBX.isekaiGateway.api.GoddessProtocol;
+import org.IFBX.isekaiGateway.api.networking.GoddessMessage;
+import org.IFBX.isekaiGateway.api.networking.GoddessPayloadCodec;
+import org.IFBX.isekaiGateway.api.networking.GoddessProtocol;
 import org.IFBX.isekaiGateway.exceptions.EventNotFoundException;
 import org.IFBX.isekaiGateway.exceptions.GatewayDatabaseException;
 import org.slf4j.Logger;
@@ -29,10 +31,11 @@ public class VelocityGoddessProtocol {
         this.logger = logger;
     }
 
-    // ------- main methods -------
+    // ------- methods -------
     // read plugin message
     @Subscribe
     public void onPluginMessage(PluginMessageEvent event) {
+        // ======= arg validation =======
         // only accept messages if for igw channel
         if (!event.getIdentifier().equals(channel)) {
             return;
@@ -47,6 +50,7 @@ public class VelocityGoddessProtocol {
             return;
         }
 
+        // ======= decoding =======
         try (DataInputStream in = new DataInputStream(event.dataAsInputStream())) {
             // unwrap fabric's envelope: [variant length][inner bytes]
             int l = readVarInt(in);
@@ -59,21 +63,28 @@ public class VelocityGoddessProtocol {
             in.readFully(inner);
 
             // decode with shared codec
-            GoddessPayloadCodec.Message msg;
+            GoddessMessage msg;
             try (DataInputStream goddessIn = new DataInputStream(new ByteArrayInputStream(inner))) {
                 msg = GoddessPayloadCodec.decode(goddessIn);
             }
 
             // dispatch based on operationCode
-            byte operationCode = msg.opCode();
-            UUID playerUuid = msg.playerUuid();
-            String actionKey = msg.actionKey();
-            switch (operationCode) {
-                case GoddessProtocol.OP_TRIGGER -> handleBackendTrigger(serverConnection, playerUuid, actionKey);
-                case GoddessProtocol.OP_CLEAR -> handleBackendClear(serverConnection, playerUuid, actionKey);
+            switch (msg.opCode()) {
+                case GoddessProtocol.OP_SYNC_TRIGGERS -> {
+                    var syncMsg = (GoddessPayloadCodec.SyncMessage) msg;
+                    handleTriggerSync(serverConnection, syncMsg.triggerKeys());
+                }
+                case GoddessProtocol.OP_TRIGGER -> {
+                    var playerMsg = (GoddessPayloadCodec.PlayerMessage) msg;
+                    handleBackendTrigger(serverConnection, playerMsg.playerUuid(), playerMsg.triggerKey());
+                }
+                case GoddessProtocol.OP_CLEAR -> {
+                    var playerMsg = (GoddessPayloadCodec.PlayerMessage) msg;
+                    handleBackendClear(serverConnection, playerMsg.playerUuid(), playerMsg.triggerKey());
+                }
                 default -> logger.warn(
-                        "[isekai-gateway] Received unknown operationCode {} on plugin channel {} from server {}",
-                        operationCode, channel.getId(), serverConnection.getServerInfo().getName()
+                        "[isekai-gateway] Received unknown operation code {} on plugin channel {} from server {}",
+                        msg.opCode(), channel.getId(), serverConnection.getServerInfo().getName()
                 );
             }
 
@@ -90,27 +101,44 @@ public class VelocityGoddessProtocol {
         }
     }
 
+    // ======= operation handlers =======
+    // opCode sync
+    private void handleTriggerSync(ServerConnection sourceServer, List<String> triggerKeys) {
+        String backendName = sourceServer.getServerInfo().getName();
+        try {
+            database.syncTriggers(triggerKeys);
+            logger.info(
+                    "[isekai-gateway] Backend '{}' reported {} triggers: {}",
+                    backendName, triggerKeys.size(), String.join(", ", triggerKeys)
+            );
+        } catch (GatewayDatabaseException ex) {
+            logger.error(
+                    "[isekai-gateway] Database error while syncing triggers from backend '{}': {}", backendName, ex.getMessage(), ex
+            );
+        }
+    }
+
     // opCode trigger
-    private void handleBackendTrigger(ServerConnection sourceServer, UUID playerUuid, String actionKey) {
+    private void handleBackendTrigger(ServerConnection sourceServer, UUID playerUuid, String triggerKey) {
 
         String backendName = sourceServer.getServerInfo().getName();
         String username = sourceServer.getPlayer().getUsername();
 
         try {
-            database.triggerMarkEventsRequired(playerUuid, actionKey);
+            database.triggerMarkEventsRequired(playerUuid, triggerKey);
             logger.info(
-                    "[isekai-gateway] Backend '{}' triggered event flags mapped to action key '{}' for player {} ({}).",
-                    backendName, actionKey, username, playerUuid
+                    "[isekai-gateway] Backend '{}' triggered event flags mapped to trigger key '{}' for player {} ({}).",
+                    backendName, triggerKey, username, playerUuid
             );
         } catch (EventNotFoundException ex) {
             logger.warn(
-                    "[isekai-gateway] Backend '{}' tried to trigger unknown or unmapped action key '{}' for player {} ({}).",
-                    backendName, actionKey, username, playerUuid
+                    "[isekai-gateway] Backend '{}' tried to trigger unknown or unmapped trigger key '{}' for player {} ({}).",
+                    backendName, triggerKey, username, playerUuid
             );
         } catch (GatewayDatabaseException ex) {
             logger.error(
-                    "[isekai-gateway] Database error when backend '{}' tried to trigger event flags mapped to action key '{}' for player {} ({}): {}.",
-                    backendName, actionKey, username, playerUuid, ex.getMessage(), ex
+                    "[isekai-gateway] Database error when backend '{}' tried to trigger event flags mapped to trigger key '{}' for player {} ({}): {}.",
+                    backendName, triggerKey, username, playerUuid, ex.getMessage(), ex
             );
         }
     }

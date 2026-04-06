@@ -122,17 +122,17 @@ public class EventSubHandler {
             return;
         }
 
-        String action = args[0];
+        String trigger = args[0];
         String eventKey = args[1];
 
         try {
-            if (action.equalsIgnoreCase("activate")) {
+            if (trigger.equalsIgnoreCase("activate")) {
                 database.activateEvent(eventKey);
                 source.sendMessage(
                         Component.text("Activated event '" + eventKey + "'.")
                 );
                 return;
-            } else if (action.equalsIgnoreCase("deactivate")) {
+            } else if (trigger.equalsIgnoreCase("deactivate")) {
                 database.deactivateEvent(eventKey);
                 source.sendMessage(
                         Component.text("Deactivated event '" + eventKey + "'.")
@@ -180,7 +180,7 @@ public class EventSubHandler {
         }
     }
 
-    // map event backend | action
+    // map event backend | trigger
     private void handleEventMap(CommandSource source, String[] args) {
         if (args.length != 3) {
             source.sendMessage(messages.eventSubUsage("map"));
@@ -201,7 +201,7 @@ public class EventSubHandler {
             } else if (subcommand.equalsIgnoreCase("trigger")) {
                 database.mapEventTrigger(eventKey, value);
                 source.sendMessage(
-                        Component.text("Mapped event '" + eventKey + "' to action '" + value + "'.")
+                        Component.text("Mapped event '" + eventKey + "' to trigger '" + value + "'.")
                 );
                 return;
             }

@@ -25,7 +25,7 @@ public class GoddessMessenger {
     // ======= list-related usage =======
     // generic list args
     public Component listUsage() {
-        return Component.text("Usage: /isekaigateway list <actions | events | flags> ...");
+        return Component.text("Usage: /isekaigateway list <triggers | events | flags> ...");
     }
 
     // list flags args
@@ -35,8 +35,8 @@ public class GoddessMessenger {
 
     // ======= flag-related usage =======
     // trigger | clear flag args
-    public Component flagUsage(String action) {
-        return Component.text("Usage: /isekaigateway " + action.toLowerCase() + " <player> <event_key>");
+    public Component flagUsage(String trigger) {
+        return Component.text("Usage: /isekaigateway " + trigger.toLowerCase() + " <player> <event_key>");
     }
 
     // ======= event-related usage =======
@@ -45,9 +45,9 @@ public class GoddessMessenger {
         return Component.text("Usage: /isekaigateway event <create | activate | deactivate | delete | map | rename | priority> ...");
     }
     
-    // event sub-usage: variant chosen with action keyword
-    public Component eventSubUsage(String action) {
-        return switch (action.toLowerCase()) {
+    // event sub-usage: variant chosen with trigger keyword
+    public Component eventSubUsage(String trigger) {
+        return switch (trigger.toLowerCase()) {
             case "create" -> Component.text("Usage: /isekaigateway event create <event_key> <name>");
             case "activate", "deactivate" -> Component.text("Usage: /isekaigateway event <activate|deactivate> <event_key>");
             case "delete" -> Component.text("Usage: /isekaigateway event delete <event_key>");
